@@ -76,10 +76,42 @@ func (rnd *Renderer) Destroy() {
 	img.Quit()
 }
 
-func (rnd *Renderer) Sprites() *Sprites {
-	return &rnd.sprites
+// DrawIdle renders the cat in idle pose: base body + both paws raised.
+func (rnd *Renderer) DrawIdle() {
+	rnd.r.SetDrawColor(0, 0, 0, 0)
+	rnd.r.Clear()
+	rnd.r.Copy(rnd.sprites.Base, nil, nil)
+	rnd.r.Copy(rnd.sprites.LeftUp, nil, nil)
+	rnd.r.Copy(rnd.sprites.RightUp, nil, nil)
+	rnd.r.Present()
 }
 
-func (rnd *Renderer) R() *sdl.Renderer {
-	return rnd.r
+// DrawLeftDown renders the cat with the left paw striking down.
+func (rnd *Renderer) DrawLeftDown() {
+	rnd.r.SetDrawColor(0, 0, 0, 0)
+	rnd.r.Clear()
+	rnd.r.Copy(rnd.sprites.Base, nil, nil)
+	rnd.r.Copy(rnd.sprites.LeftDown, nil, nil)
+	rnd.r.Copy(rnd.sprites.RightUp, nil, nil)
+	rnd.r.Present()
+}
+
+// DrawRightDown renders the cat with the right paw striking down.
+func (rnd *Renderer) DrawRightDown() {
+	rnd.r.SetDrawColor(0, 0, 0, 0)
+	rnd.r.Clear()
+	rnd.r.Copy(rnd.sprites.Base, nil, nil)
+	rnd.r.Copy(rnd.sprites.LeftUp, nil, nil)
+	rnd.r.Copy(rnd.sprites.RightDown, nil, nil)
+	rnd.r.Present()
+}
+
+// DrawBothDown renders the cat with both paws striking down.
+func (rnd *Renderer) DrawBothDown() {
+	rnd.r.SetDrawColor(0, 0, 0, 0)
+	rnd.r.Clear()
+	rnd.r.Copy(rnd.sprites.Base, nil, nil)
+	rnd.r.Copy(rnd.sprites.LeftDown, nil, nil)
+	rnd.r.Copy(rnd.sprites.RightDown, nil, nil)
+	rnd.r.Present()
 }

@@ -3,10 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 
+	"github.com/andraantariksa/bongocat-x11/internal/renderer"
 	"github.com/andraantariksa/bongocat-x11/internal/window"
 	"github.com/veandco/go-sdl2/sdl"
 )
+
+func assetDir() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "assets"
+	}
+	return filepath.Join(filepath.Dir(file), "assets")
+}
 
 func main() {
 	win, err := window.New()
@@ -15,6 +26,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer win.Destroy()
+
+	rnd, err := renderer.New(win.Renderer, assetDir())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	defer rnd.Destroy()
 
 	for {
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -29,10 +47,7 @@ func main() {
 			}
 		}
 
-		win.Renderer.SetDrawColor(0, 0, 0, 0)
-		win.Renderer.Clear()
-		win.Renderer.Present()
-
+		rnd.DrawIdle()
 		sdl.Delay(16)
 	}
 }
