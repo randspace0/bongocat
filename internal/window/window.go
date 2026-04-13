@@ -3,6 +3,7 @@ package window
 import (
 	"fmt"
 
+	"github.com/andraantariksa/bongocat-x11/xshape"
 	"github.com/veandco/go-sdl2/sdl"
 )
 
@@ -44,6 +45,12 @@ func New() (*Window, error) {
 	}
 
 	renderer.SetDrawBlendMode(sdl.BLENDMODE_BLEND)
+
+	if err := xshape.MakeClickThrough(win); err != nil {
+		renderer.Destroy()
+		win.Destroy()
+		return nil, fmt.Errorf("xshape click-through: %w", err)
+	}
 
 	return &Window{SDLWindow: win, Renderer: renderer}, nil
 }
