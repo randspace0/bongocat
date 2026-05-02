@@ -1,5 +1,7 @@
 # bongocat
 
+![screenshot](screenshot.png)
+
 A lightweight BongoCat desktop widget for Linux/X11. The cat sits in a corner of your screen and taps its paws in time with your keyboard and mouse clicks.
 
 ## Inspiration
@@ -81,7 +83,7 @@ Significant portions of this project — including the pure-Go X11 window manage
 DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
 Version 2, December 2004
 
-Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
+Copyright (C) 2026 randspace0 <https://github.com/randspace0>
 
 Everyone is permitted to copy and distribute verbatim or modified
 copies of this license document, and changing it is allowed as long
