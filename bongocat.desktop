@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=BongoCat
+GenericName=Desktop Widget
+Comment=BongoCat that taps its paws in time with your keyboard and mouse
+Exec=bongocat
+Icon=bongocat
+Type=Application
+Categories=Utility;
+Keywords=bongo;cat;widget;keyboard;
+StartupNotify=false
+NoDisplay=false
