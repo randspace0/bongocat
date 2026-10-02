@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/getlantern/systray v1.2.2
 	github.com/jezek/xgb v1.3.1
+	github.com/rajveermalviya/go-wayland/wayland v0.0.0-20230130181619-0ad78d1310b2
 )
 
 require (

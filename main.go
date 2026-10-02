@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"fmt"
 	"io/fs"
 	"math"
@@ -15,18 +16,15 @@ import (
 	"github.com/randspace0/bongocat/internal/renderer"
 	"github.com/randspace0/bongocat/internal/tray"
 	"github.com/randspace0/bongocat/internal/window"
-	"github.com/randspace0/bongocat/xshape"
-	"github.com/jezek/xgb/xproto"
 )
 
-//go:embed assets/base.png
+//go:embed assets/skins/classic/base.png
 var iconPNG []byte
 
-//go:embed assets
-var assetsFS embed.FS
+//go:embed assets/skins
+var skinsFS embed.FS
 
-// aspectRatio is the native width/height ratio, locked during resize.
-const aspectRatio = float64(window.Width) / float64(window.Height)
+const defaultSkin = "classic"
 
 // minWidth is the smallest the window can be resized to.
 const minWidth = 120
@@ -44,9 +42,7 @@ const (
 	cornerBR
 )
 
-func detectCorner(ex, ey int16, w, h uint16) corner {
-	x, y := int(ex), int(ey)
-	ww, wh := int(w), int(h)
+func detectCorner(x, y, ww, wh int) corner {
 	inL := x < cornerZone
 	inR := x >= ww-cornerZone
 	inT := y < cornerZone
@@ -64,25 +60,48 @@ func detectCorner(ex, ey int16, w, h uint16) corner {
 	return noCorner
 }
 
+func loadSkin(name string) (*renderer.Renderer, error) {
+	dir, err := fs.Sub(skinsFS, "assets/skins/"+name)
+	if err != nil {
+		return nil, err
+	}
+	return renderer.New(dir)
+}
+
 func main() {
-	win, err := window.New()
+	skinName := flag.String("character", defaultSkin, "character to show (also selectable from the tray menu)")
+	flag.Parse()
+
+	skins, _ := fs.Sub(skinsFS, "assets/skins")
+	skinNames, err := renderer.Skins(skins)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+
+	rnd, err := loadSkin(*skinName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: character %q: %v\n", *skinName, err)
+		os.Exit(1)
+	}
+	nativeW, nativeH := rnd.Size()
+	// aspectRatio is the skin's width/height ratio, locked during resize.
+	aspectRatio := float64(nativeW) / float64(nativeH)
+
+	win, err := window.New(nativeW, nativeH)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 	defer win.Destroy()
 
-	sprites, _ := fs.Sub(assetsFS, "assets")
-	rnd, err := renderer.New(sprites)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-	defer rnd.Destroy()
-
 	c := cat.New()
 
-	mon, err := input.New(func(ev input.Event) {
+	newMonitor := func(h func(input.Event)) (interface{ Stop() }, error) { return input.New(h) }
+	if window.IsWayland() {
+		newMonitor = func(h func(input.Event)) (interface{ Stop() }, error) { return input.NewEvdev(h) }
+	}
+	mon, err := newMonitor(func(ev input.Event) {
 		switch ev.Type {
 		case input.ButtonPress:
 			if input.IsMouseLeft(ev.Detail) {
@@ -116,7 +135,7 @@ func main() {
 	}
 	defer mon.Stop()
 
-	tr := tray.New(iconPNG)
+	tr := tray.New(iconPNG, skinNames, *skinName)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -126,9 +145,8 @@ func main() {
 	resizeDragging := false
 	activeCorner := noCorner
 
-	var dragStartRootX, dragStartRootY int16
-	var resizeStartX, resizeStartY int16
-	var resizeStartW, resizeStartH uint16
+	var dragStartRootX, dragStartRootY int
+	var resizeStartX, resizeStartY, resizeStartW, resizeStartH int
 
 	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
@@ -143,58 +161,61 @@ func main() {
 			moveEnabled = enabled
 			moveDragging = false
 			resizeDragging = false
-			if enabled {
-				xshape.ResetClickThrough(win.Conn, win.Wid)
-			} else {
-				xshape.MakeClickThrough(win.Conn, win.Wid)
+			if err := win.SetClickThrough(!enabled); err != nil {
+				fmt.Fprintln(os.Stderr, "error: click-through:", err)
 			}
+		case name := <-tr.SkinCh:
+			next, err := loadSkin(name)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: character %q: %v\n", name, err)
+				break
+			}
+			rnd = next
+			nativeW, nativeH = rnd.Size()
+			aspectRatio = float64(nativeW) / float64(nativeH)
+			// Keep the current width; height follows the new aspect.
+			x, y := win.Pos()
+			w, _ := win.Size()
+			win.MoveResize(x, y, w, int(math.Round(float64(w)/aspectRatio)))
 		case <-ticker.C:
 			for {
-				ev := win.PollEvent()
-				if ev == nil {
+				e, ok := win.Poll()
+				if !ok {
 					break
 				}
-				switch e := ev.(type) {
-				case xproto.DestroyNotifyEvent:
+				switch e.Kind {
+				case window.Closed:
 					return
 
-				case xproto.ButtonPressEvent:
-					if !moveEnabled || e.Detail != 1 {
+				case window.Press:
+					if !moveEnabled || e.Button != 1 {
 						break
 					}
-					cn := detectCorner(e.EventX, e.EventY, win.W, win.H)
-					if cn != noCorner {
+					ww, wh := win.Size()
+					dragStartRootX, dragStartRootY = e.RootX, e.RootY
+					if cn := detectCorner(e.X, e.Y, ww, wh); cn != noCorner {
 						resizeDragging = true
 						activeCorner = cn
-						dragStartRootX = e.RootX
-						dragStartRootY = e.RootY
-						resizeStartX = win.X
-						resizeStartY = win.Y
-						resizeStartW = win.W
-						resizeStartH = win.H
+						resizeStartX, resizeStartY = win.Pos()
+						resizeStartW, resizeStartH = ww, wh
 					} else {
 						moveDragging = true
-						dragStartRootX = e.RootX
-						dragStartRootY = e.RootY
 					}
 
-				case xproto.ButtonReleaseEvent:
-					if e.Detail == 1 {
+				case window.Release:
+					if e.Button == 1 {
 						moveDragging = false
 						resizeDragging = false
 						activeCorner = noCorner
 					}
 
-				case xproto.MotionNotifyEvent:
+				case window.Motion:
 					if moveDragging {
-						win.Move(
-							win.X+e.RootX-dragStartRootX,
-							win.Y+e.RootY-dragStartRootY,
-						)
-						dragStartRootX = e.RootX
-						dragStartRootY = e.RootY
+						x, y := win.Pos()
+						win.Move(x+e.RootX-dragStartRootX, y+e.RootY-dragStartRootY)
+						dragStartRootX, dragStartRootY = e.RootX, e.RootY
 					} else if resizeDragging {
-						applyResize(win, activeCorner,
+						applyResize(aspectRatio, win, activeCorner,
 							e.RootX-dragStartRootX,
 							resizeStartX, resizeStartY,
 							resizeStartW, resizeStartH)
@@ -203,54 +224,41 @@ func main() {
 			}
 
 			// Render at current window size, with border when move/resize is on.
-			w, h := int(win.W), int(win.H)
+			w, h := win.Size()
 			border := moveEnabled
-			switch c.State() {
-			case cat.LeftDown:
-				win.PutImage(rnd.DrawLeftDown(w, h, border))
-			case cat.RightDown:
-				win.PutImage(rnd.DrawRightDown(w, h, border))
-			case cat.BothDown:
-				win.PutImage(rnd.DrawBothDown(w, h, border))
-			default:
-				win.PutImage(rnd.DrawIdle(w, h, border))
-			}
+			win.PutImage(rnd.Draw(c.State(), w, h, border))
 		}
 	}
 }
 
 // applyResize computes and applies a ratio-locked resize for the given corner.
 // dx is the horizontal drag delta from the resize start.
-func applyResize(win interface {
-	MoveResize(x, y int16, w, h uint16)
-}, c corner, dx int16,
-	startX, startY int16, startW, startH uint16,
+func applyResize(aspectRatio float64, win window.Window, c corner, dx int,
+	startX, startY, startW, startH int,
 ) {
 	var newW int
 	switch c {
 	case cornerBR, cornerTR:
-		newW = int(startW) + int(dx)
+		newW = startW + dx
 	case cornerBL, cornerTL:
-		newW = int(startW) - int(dx)
+		newW = startW - dx
 	}
 	if newW < minWidth {
 		newW = minWidth
 	}
 	newH := int(math.Round(float64(newW) / aspectRatio))
 
-	var newX, newY int16
-	newX = startX
-	newY = startY
+	newX, newY := startX, startY
 	switch c {
 	case cornerBL, cornerTL:
 		// Right edge stays fixed.
-		newX = startX + int16(int(startW)-newW)
+		newX = startX + startW - newW
 	}
 	switch c {
 	case cornerTR, cornerTL:
 		// Bottom edge stays fixed.
-		newY = startY + int16(int(startH)-newH)
+		newY = startY + startH - newH
 	}
 
-	win.MoveResize(newX, newY, uint16(newW), uint16(newH))
+	win.MoveResize(newX, newY, newW, newH)
 }
