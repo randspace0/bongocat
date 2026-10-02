@@ -2,7 +2,7 @@
 
 ![screenshot](screenshot.png)
 
-A lightweight BongoCat desktop widget for Linux/X11. The cat sits in a corner of your screen and taps its paws in time with your keyboard and mouse clicks.
+A lightweight BongoCat desktop widget for Linux (X11 and Wayland). The cat sits in a corner of your screen and taps its paws in time with your keyboard and mouse clicks.
 
 ## Inspiration
 
@@ -15,14 +15,20 @@ Ported from [BongoCat-mac](https://github.com/Gamma-Software/BongoCat-mac) by Ga
 - **Per-pixel alpha transparency** — the window blends into your desktop (requires a compositing manager such as picom or compton)
 - **Click-through** — by default the window passes all clicks to whatever is underneath it
 - **Draggable and resizable** — enable "Enable Move and Resize" from the system tray icon; drag the window to reposition it or drag a corner to resize (aspect ratio locked)
-- **System tray icon** — right-click the tray icon to toggle move/resize mode or quit
+- **Characters** — pick the classic cat, Hachi, Momonga or Usagi from the tray's Character menu (or `./bongocat -character hachi`). To add one, drop `idle.png`, `left.png`, `right.png` in `assets/skins/<name>/`
+- **System tray icon** — right-click the tray icon to toggle move/resize mode, change character, or quit
 
 ## Getting Started
 
 ### Requirements
 
-- Linux with X11 (not Wayland)
-- A compositing manager running (e.g. picom) for alpha transparency
+- X11 with a compositing manager (e.g. picom) for alpha transparency, **or**
+- Wayland with `wlr-layer-shell` support (COSMIC, Hyprland, Sway, KDE; not GNOME). Global input is read from `/dev/input`, so your user must be in the `input` group:
+
+```
+sudo usermod -aG input $USER   # then log out and back in
+```
+
 - `libayatana-appindicator3-dev` (system tray support)
 
 ```
@@ -71,7 +77,9 @@ go build -o bongocat .
 | Drag a corner | Resizes the window (ratio locked) |
 | Tray → Quit | Exits |
 
-> **Note:** XRecord requires that no other application is holding an exclusive XRecord context. If the cat does not react to input, check that no other input-monitoring tool is blocking XRecord.
+> **Note (Wayland):** keyboards/mice plugged in after launch are not picked up until restart.
+
+> **Note (X11):** XRecord requires that no other application is holding an exclusive XRecord context. If the cat does not react to input, check that no other input-monitoring tool is blocking XRecord.
 
 ## Disclaimer
 

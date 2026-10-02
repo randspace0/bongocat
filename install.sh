@@ -71,7 +71,7 @@ echo "Installed binary  → ${BIN_DIR}/${BINARY}"
 
 # Install icon (256×256 slot; the image is 397×201 but DEs handle non-square fine)
 mkdir -p "${ICON_DIR}"
-cp "${REPO_DIR}/assets/base.png" "${ICON_DIR}/${BINARY}.png"
+cp "${REPO_DIR}/assets/skins/classic/base.png" "${ICON_DIR}/${BINARY}.png"
 echo "Installed icon    → ${ICON_DIR}/${BINARY}.png"
 
 # Install desktop entry with the real binary path substituted

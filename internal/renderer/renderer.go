@@ -7,6 +7,8 @@ import (
 	"image/draw"
 	"image/png"
 	"io/fs"
+
+	"github.com/randspace0/bongocat/internal/cat"
 )
 
 const (
@@ -14,15 +16,35 @@ const (
 	handleSize  = 12
 )
 
+// NativeWidth is the width every skin is normalised to on load.
+const NativeWidth = 397
+
+// Renderer draws one skin's frames, indexed by cat.State.
 type Renderer struct {
-	base, leftUp, leftDown, rightUp, rightDown *image.RGBA
-	nativeW, nativeH                           int
-	nativeFrame                                *image.RGBA
-	outFrame                                   *image.RGBA
-	bgra                                       []byte
-	outW, outH                                 int
+	frames           [4]*image.RGBA
+	nativeW, nativeH int
+	outFrame         *image.RGBA
+	bgra             []byte
+	outW, outH       int
 }
 
+// Skins lists the skin directory names under fsys.
+func Skins(fsys fs.FS) ([]string, error) {
+	ents, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range ents {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	return names, nil
+}
+
+// New loads the skin directory fsys. A skin is either layered (base.png plus
+// left/right up/down paws) or flat (idle.png, left.png, right.png).
 func New(fsys fs.FS) (*Renderer, error) {
 	load := func(name string) (*image.RGBA, error) {
 		f, err := fsys.Open(name)
@@ -34,85 +56,64 @@ func New(fsys fs.FS) (*Renderer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode %s: %w", name, err)
 		}
-		return toRGBA(img), nil
+		return boxScale(toRGBA(img), NativeWidth), nil
+	}
+	loadAll := func(names ...string) ([]*image.RGBA, error) {
+		imgs := make([]*image.RGBA, len(names))
+		for i, n := range names {
+			img, err := load(n)
+			if err != nil {
+				return nil, err
+			}
+			imgs[i] = img
+		}
+		return imgs, nil
 	}
 
-	base, err := load("base.png")
-	if err != nil {
-		return nil, err
+	r := &Renderer{}
+	if _, err := fs.Stat(fsys, "base.png"); err == nil {
+		l, err := loadAll("base.png", "left-up.png", "left-down.png", "right-up.png", "right-down.png")
+		if err != nil {
+			return nil, err
+		}
+		base, lu, ld, ru, rd := l[0], l[1], l[2], l[3], l[4]
+		r.frames = [4]*image.RGBA{
+			cat.Idle:      layer(base, lu, ru),
+			cat.LeftDown:  layer(base, ld, ru),
+			cat.RightDown: layer(base, lu, rd),
+			cat.BothDown:  layer(base, ld, rd),
+		}
+	} else {
+		l, err := loadAll("idle.png", "left.png", "right.png")
+		if err != nil {
+			return nil, err
+		}
+		// Flat skins have no both-paws frame; reuse the left one.
+		r.frames = [4]*image.RGBA{cat.Idle: l[0], cat.LeftDown: l[1], cat.RightDown: l[2], cat.BothDown: l[1]}
 	}
-	leftUp, err := load("left-up.png")
-	if err != nil {
-		return nil, err
-	}
-	leftDown, err := load("left-down.png")
-	if err != nil {
-		return nil, err
-	}
-	rightUp, err := load("right-up.png")
-	if err != nil {
-		return nil, err
-	}
-	rightDown, err := load("right-down.png")
-	if err != nil {
-		return nil, err
-	}
-
-	bounds := base.Bounds()
-	nativeW, nativeH := bounds.Dx(), bounds.Dy()
-	nativeFrame := image.NewRGBA(bounds)
-
-	return &Renderer{
-		base:        base,
-		leftUp:      leftUp,
-		leftDown:    leftDown,
-		rightUp:     rightUp,
-		rightDown:   rightDown,
-		nativeW:     nativeW,
-		nativeH:     nativeH,
-		nativeFrame: nativeFrame,
-	}, nil
+	b := r.frames[cat.Idle].Bounds()
+	r.nativeW, r.nativeH = b.Dx(), b.Dy()
+	return r, nil
 }
+
+// Size returns the skin's native pixel size.
+func (r *Renderer) Size() (w, h int) { return r.nativeW, r.nativeH }
 
 func (r *Renderer) Destroy() {}
 
-func (r *Renderer) DrawIdle(w, h int, border bool) []byte {
-	return r.compose(r.leftUp, r.rightUp, w, h, border)
-}
-
-func (r *Renderer) DrawLeftDown(w, h int, border bool) []byte {
-	return r.compose(r.leftDown, r.rightUp, w, h, border)
-}
-
-func (r *Renderer) DrawRightDown(w, h int, border bool) []byte {
-	return r.compose(r.leftUp, r.rightDown, w, h, border)
-}
-
-func (r *Renderer) DrawBothDown(w, h int, border bool) []byte {
-	return r.compose(r.leftDown, r.rightDown, w, h, border)
-}
-
-func (r *Renderer) compose(left, right *image.RGBA, w, h int, border bool) []byte {
-	// Compose sprites at native resolution.
-	nb := r.nativeFrame.Bounds()
-	pt := image.Point{}
-	draw.Draw(r.nativeFrame, nb, image.Transparent, pt, draw.Src)
-	draw.Draw(r.nativeFrame, nb, r.base, pt, draw.Over)
-	draw.Draw(r.nativeFrame, nb, left, pt, draw.Over)
-	draw.Draw(r.nativeFrame, nb, right, pt, draw.Over)
-
-	// Resize output buffers if target size changed.
+// Draw renders state at w×h, with the move/resize border when border is set.
+func (r *Renderer) Draw(state cat.State, w, h int, border bool) []byte {
 	if r.outW != w || r.outH != h {
 		r.outFrame = image.NewRGBA(image.Rect(0, 0, w, h))
 		r.bgra = make([]byte, w*h*4)
 		r.outW, r.outH = w, h
 	}
 
-	// Scale or copy native frame to output.
+	src := r.frames[state]
 	if w == r.nativeW && h == r.nativeH {
-		copy(r.outFrame.Pix, r.nativeFrame.Pix)
+		copy(r.outFrame.Pix, src.Pix)
 	} else {
-		scaleNN(r.nativeFrame, r.outFrame)
+		scaleNN(src, r.outFrame)
 	}
 
 	if border {
@@ -120,6 +121,47 @@ func (r *Renderer) compose(left, right *image.RGBA, w, h int, border bool) []byt
 	}
 
 	return rgbaToBGRA(r.outFrame, r.bgra)
+}
+
+// layer composites the base and both paw sprites into one frame.
+func layer(base, left, right *image.RGBA) *image.RGBA {
+	out := image.NewRGBA(base.Bounds())
+	for _, img := range []*image.RGBA{base, left, right} {
+		draw.Draw(out, out.Bounds(), img, image.Point{}, draw.Over)
+	}
+	return out
+}
+
+// boxScale downscales src to width w (area average on premultiplied pixels).
+// Images already at or below w are returned unchanged.
+func boxScale(src *image.RGBA, w int) *image.RGBA {
+	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
+	if sw <= w {
+		return src
+	}
+	h := sh * w / sw
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		y0, y1 := y*sh/h, max((y+1)*sh/h, y*sh/h+1)
+		for x := 0; x < w; x++ {
+			x0, x1 := x*sw/w, max((x+1)*sw/w, x*sw/w+1)
+			var sum [4]uint32
+			n := uint32((y1 - y0) * (x1 - x0))
+			for sy := y0; sy < y1; sy++ {
+				for sx := x0; sx < x1; sx++ {
+					i := src.PixOffset(sx, sy)
+					for c := 0; c < 4; c++ {
+						sum[c] += uint32(src.Pix[i+c])
+					}
+				}
+			}
+			di := dst.PixOffset(x, y)
+			for c := 0; c < 4; c++ {
+				dst.Pix[di+c] = uint8(sum[c] / n)
+			}
+		}
+	}
+	return dst
 }
 
 // scaleNN scales src into dst using nearest-neighbour interpolation.
