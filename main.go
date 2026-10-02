@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/randspace0/bongocat/internal/cat"
+	"github.com/randspace0/bongocat/internal/config"
 	"github.com/randspace0/bongocat/internal/input"
 	"github.com/randspace0/bongocat/internal/renderer"
 	"github.com/randspace0/bongocat/internal/tray"
@@ -72,6 +73,13 @@ func main() {
 	skinName := flag.String("character", defaultSkin, "character to show (also selectable from the tray menu)")
 	flag.Parse()
 
+	cfg := config.Load()
+	flagSet := false
+	flag.Visit(func(f *flag.Flag) { flagSet = flagSet || f.Name == "character" })
+	if !flagSet && cfg.Character != "" {
+		*skinName = cfg.Character
+	}
+
 	skins, _ := fs.Sub(skinsFS, "assets/skins")
 	skinNames, err := renderer.Skins(skins)
 	if err != nil {
@@ -94,6 +102,18 @@ func main() {
 		os.Exit(1)
 	}
 	defer win.Destroy()
+
+	currentSkin := *skinName
+	if cfg.Width >= minWidth {
+		win.MoveResize(cfg.X, cfg.Y, cfg.Width, int(math.Round(float64(cfg.Width)*float64(nativeH)/float64(nativeW))))
+	}
+	defer func() {
+		x, y := win.Pos()
+		w, _ := win.Size()
+		if err := config.Save(config.Config{Character: currentSkin, X: x, Y: y, Width: w}); err != nil {
+			fmt.Fprintln(os.Stderr, "error: save config:", err)
+		}
+	}()
 
 	c := cat.New()
 
@@ -171,6 +191,7 @@ func main() {
 				break
 			}
 			rnd = next
+			currentSkin = name
 			nativeW, nativeH = rnd.Size()
 			aspectRatio = float64(nativeW) / float64(nativeH)
 			// Keep the current width; height follows the new aspect.
