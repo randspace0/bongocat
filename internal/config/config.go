@@ -11,7 +11,8 @@ type Config struct {
 	Character string `json:"character,omitempty"`
 	X         int    `json:"x"`
 	Y         int    `json:"y"`
-	Width     int    `json:"width,omitempty"` // 0 = never saved, use skin default
+	Width     int    `json:"width,omitempty"`   // 0 = never saved, use skin default
+	Opacity   int    `json:"opacity,omitempty"` // percent; 0 = never saved, fully opaque
 }
 
 func path() (string, error) {

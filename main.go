@@ -104,13 +104,17 @@ func main() {
 	defer win.Destroy()
 
 	currentSkin := *skinName
+	opacity := cfg.Opacity
+	if opacity < 1 || opacity > 100 {
+		opacity = 100
+	}
 	if cfg.Width >= minWidth {
 		win.MoveResize(cfg.X, cfg.Y, cfg.Width, int(math.Round(float64(cfg.Width)*float64(nativeH)/float64(nativeW))))
 	}
 	defer func() {
 		x, y := win.Pos()
 		w, _ := win.Size()
-		if err := config.Save(config.Config{Character: currentSkin, X: x, Y: y, Width: w}); err != nil {
+		if err := config.Save(config.Config{Character: currentSkin, X: x, Y: y, Width: w, Opacity: opacity}); err != nil {
 			fmt.Fprintln(os.Stderr, "error: save config:", err)
 		}
 	}()
@@ -155,7 +159,7 @@ func main() {
 	}
 	defer mon.Stop()
 
-	tr := tray.New(iconPNG, skinNames, *skinName)
+	tr := tray.New(iconPNG, skinNames, *skinName, opacity)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -184,6 +188,7 @@ func main() {
 			if err := win.SetClickThrough(!enabled); err != nil {
 				fmt.Fprintln(os.Stderr, "error: click-through:", err)
 			}
+		case opacity = <-tr.OpacityCh:
 		case name := <-tr.SkinCh:
 			next, err := loadSkin(name)
 			if err != nil {
@@ -247,7 +252,9 @@ func main() {
 			// Render at current window size, with border when move/resize is on.
 			w, h := win.Size()
 			border := moveEnabled
-			win.PutImage(rnd.Draw(c.State(), w, h, border))
+			frame := rnd.Draw(c.State(), w, h, border)
+			renderer.ApplyOpacity(frame, opacity)
+			win.PutImage(frame)
 		}
 	}
 }
