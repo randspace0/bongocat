@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Linux input-event-codes.h values.
@@ -18,6 +19,17 @@ const (
 	btnLeft  = 0x110
 	btnRight = 0x111
 	btnMax   = 0x120 // codes in [btnLeft, btnMax) are mouse buttons
+
+	evAbs    = 3
+	absX     = 0
+	absY     = 1
+	btnTouch = 0x14a
+
+	// A touchpad contact shorter than tapMaxDuration that moves less than
+	// tapMaxTravel (device units) counts as a tap-to-click, which libinput
+	// synthesizes above evdev and so never appears as BTN_LEFT.
+	tapMaxDuration = 200 * time.Millisecond
+	tapMaxTravel   = 150
 )
 
 // x11KeycodeOffset converts an evdev key code to the X11 keycode that
@@ -78,15 +90,33 @@ func hasKeys(sysDev string) bool {
 // type u16, code u16, value s32.
 func readEvdev(f *os.File, handler func(Event)) {
 	var buf [24]byte
+	var tap tapTracker
 	for {
 		if _, err := io.ReadFull(f, buf[:]); err != nil {
 			return
 		}
-		if binary.LittleEndian.Uint16(buf[16:]) != evKey {
-			continue
-		}
+		typ := binary.LittleEndian.Uint16(buf[16:])
 		code := binary.LittleEndian.Uint16(buf[18:])
 		value := binary.LittleEndian.Uint32(buf[20:])
+		if typ == evAbs {
+			tap.move(code, int32(value))
+			continue
+		}
+		if typ != evKey {
+			continue
+		}
+		if code == btnTouch {
+			if value == 1 {
+				tap.down()
+			} else if value == 0 && tap.up() {
+				handler(Event{Type: ButtonPress, Detail: 1})
+				handler(Event{Type: ButtonRelease, Detail: 1})
+			}
+			continue
+		}
+		if code == btnLeft || code == btnRight {
+			tap.cancel() // physical click: not a tap
+		}
 		if value > 1 { // ignore autorepeat
 			continue
 		}
@@ -125,4 +155,38 @@ func (m *EvdevMonitor) Stop() {
 			f.Close()
 		}
 	})
+}
+
+// tapTracker decides whether one touchpad contact was a tap.
+type tapTracker struct {
+	at           time.Time
+	x, y         int32
+	haveX, haveY bool
+	moved, off   bool
+}
+
+func (t *tapTracker) down() { *t = tapTracker{at: time.Now()} }
+
+func (t *tapTracker) cancel() { t.off = true }
+
+func (t *tapTracker) move(axis uint16, v int32) {
+	var start *int32
+	var have *bool
+	switch axis {
+	case absX:
+		start, have = &t.x, &t.haveX
+	case absY:
+		start, have = &t.y, &t.haveY
+	default:
+		return
+	}
+	if !*have {
+		*start, *have = v, true
+	} else if d := v - *start; d > tapMaxTravel || d < -tapMaxTravel {
+		t.moved = true
+	}
+}
+
+func (t *tapTracker) up() bool {
+	return !t.off && !t.moved && !t.at.IsZero() && time.Since(t.at) < tapMaxDuration
 }
