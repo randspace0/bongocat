@@ -6,6 +6,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/jezek/xgb v1.3.1
 	github.com/rajveermalviya/go-wayland/wayland v0.0.0-20230130181619-0ad78d1310b2
+	golang.org/x/sys v0.49.0
 )
 
 require (
@@ -17,5 +18,4 @@ require (
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
-	golang.org/x/sys v0.1.0 // indirect
 )

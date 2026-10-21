@@ -2,7 +2,7 @@
 
 ![screenshot](screenshot.png)
 
-A lightweight BongoCat desktop widget for Linux (X11 and Wayland). The cat sits in a corner of your screen and taps its paws in time with your keyboard and mouse clicks.
+A lightweight BongoCat desktop widget for Linux (X11 and Wayland) and Windows. The cat sits in a corner of your screen and taps its paws in time with your keyboard and mouse clicks.
 
 ## Inspiration
 
@@ -56,6 +56,17 @@ To uninstall:
 ```
 ./install.sh --uninstall
 ```
+
+### Windows
+
+Requires Go 1.21+. No other dependencies; input is read with low-level keyboard/mouse hooks and the cat is drawn in a layered, click-through, always-on-top window.
+
+```
+go build -ldflags "-H=windowsgui" -o bongocat.exe .
+.ongocat.exe
+```
+
+"Launch on Startup" in the tray menu adds a per-user `Run` registry entry. Settings are stored in `%APPDATA%ongocat\config.json`.
 
 ### Build and run manually
 

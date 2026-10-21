@@ -1,3 +1,5 @@
+//go:build !windows
+
 package input
 
 import (
@@ -13,22 +15,6 @@ import (
 	"github.com/jezek/xgb/record"
 	"github.com/jezek/xgb/xproto"
 )
-
-// EventType mirrors X11 event types we care about.
-type EventType uint8
-
-const (
-	KeyPress      EventType = 2
-	KeyRelease    EventType = 3
-	ButtonPress   EventType = 4
-	ButtonRelease EventType = 5
-)
-
-// Event is delivered to the handler callback.
-type Event struct {
-	Type   EventType
-	Detail uint8 // keycode or button number
-}
 
 // Monitor listens to global X11 input events via XRecord.
 type Monitor struct {
@@ -204,7 +190,7 @@ func dialX11Raw() (net.Conn, error) {
 	padLen := func(n int) int { return (4 - (n & 3)) & 3 }
 	size := 12 + len(authName) + padLen(len(authName)) + len(authData) + padLen(len(authData))
 	buf := make([]byte, size)
-	buf[0] = 0x6c // LSB
+	buf[0] = 0x6c                              // LSB
 	binary.LittleEndian.PutUint16(buf[2:], 11) // major version
 	binary.LittleEndian.PutUint16(buf[6:], uint16(len(authName)))
 	binary.LittleEndian.PutUint16(buf[8:], uint16(len(authData)))
@@ -342,9 +328,3 @@ func IsLeft(keycode uint8) bool {
 	}
 	return false
 }
-
-// IsMouseLeft returns true for button 1 (left click).
-func IsMouseLeft(button uint8) bool { return button == 1 }
-
-// IsMouseRight returns true for button 3 (right click).
-func IsMouseRight(button uint8) bool { return button == 3 }

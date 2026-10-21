@@ -26,7 +26,7 @@ func New(iconPNG []byte, skins []string, current string, opacity int) *Tray {
 }
 
 func (t *Tray) onReady(iconPNG []byte, skins []string, current string, opacity int) {
-	systray.SetIcon(iconPNG)
+	systray.SetIcon(trayIcon(iconPNG))
 	systray.SetTooltip("BongoCat")
 
 	mMove := systray.AddMenuItemCheckbox("Enable Move and Resize", "Drag or resize the window", false)
