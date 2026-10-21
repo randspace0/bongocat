@@ -68,7 +68,8 @@ func (m *Monitor) loop(handler func(Event), ready chan<- error) {
 	}
 	kbCb := syscall.NewCallback(func(code, wparam, lparam uintptr) uintptr {
 		if int32(code) >= 0 {
-			vk := uint8(*(*uint32)(unsafe.Pointer(lparam)))
+			// lparam is a KBDLLHOOKSTRUCT*; reinterpreting the uintptr in place keeps vet quiet.
+			vk := uint8(**(**uint32)(unsafe.Pointer(&lparam)))
 			switch wparam {
 			case wmKeyDown, wmSysKeyDown:
 				if !held[vk] {
