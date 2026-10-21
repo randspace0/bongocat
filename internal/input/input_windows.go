@@ -1,6 +1,8 @@
 package input
 
 import (
+	"errors"
+	"fmt"
 	"runtime"
 	"syscall"
 	"unsafe"
@@ -101,13 +103,13 @@ func (m *Monitor) loop(handler func(Event), ready chan<- error) {
 
 	kb, _, err := procSetWindowsHookExW.Call(whKeyboardLL, kbCb, 0, 0)
 	if kb == 0 {
-		ready <- fmtErr("keyboard hook", err)
+		ready <- fmt.Errorf("input: keyboard hook: %w", err)
 		return
 	}
 	defer procUnhookWindowsHookEx.Call(kb)
 	ms, _, err := procSetWindowsHookExW.Call(whMouseLL, mouseCb, 0, 0)
 	if ms == 0 {
-		ready <- fmtErr("mouse hook", err)
+		ready <- fmt.Errorf("input: mouse hook: %w", err)
 		return
 	}
 	defer procUnhookWindowsHookEx.Call(ms)
@@ -121,17 +123,6 @@ func (m *Monitor) loop(handler func(Event), ready chan<- error) {
 		}
 	}
 }
-
-func fmtErr(what string, err error) error {
-	return &hookError{what, err}
-}
-
-type hookError struct {
-	what string
-	err  error
-}
-
-func (e *hookError) Error() string { return "input: " + e.what + ": " + e.err.Error() }
 
 // Stop removes the hooks and ends the message loop.
 func (m *Monitor) Stop() {
@@ -158,5 +149,5 @@ var leftKeys = func() (s [256]bool) {
 
 // NewEvdev exists so shared code compiles; evdev is Linux-only.
 func NewEvdev(handler func(Event)) (*Monitor, error) {
-	return nil, fmtErr("evdev", syscall.ENOSYS)
+	return nil, errors.New("input: evdev is Linux-only")
 }
