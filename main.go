@@ -111,13 +111,15 @@ func main() {
 	if cfg.Width >= minWidth {
 		win.MoveResize(cfg.X, cfg.Y, cfg.Width, int(math.Round(float64(cfg.Width)*float64(nativeH)/float64(nativeW))))
 	}
-	defer func() {
+	// Saved on every change too: on Windows the process is often killed without running defers.
+	save := func() {
 		x, y := win.Pos()
 		w, _ := win.Size()
 		if err := config.Save(config.Config{Character: currentSkin, X: x, Y: y, Width: w, Opacity: opacity}); err != nil {
 			fmt.Fprintln(os.Stderr, "error: save config:", err)
 		}
-	}()
+	}
+	defer save()
 
 	c := cat.New()
 
@@ -189,6 +191,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, "error: click-through:", err)
 			}
 		case opacity = <-tr.OpacityCh:
+			save()
 		case name := <-tr.SkinCh:
 			next, err := loadSkin(name)
 			if err != nil {
@@ -203,6 +206,7 @@ func main() {
 			x, y := win.Pos()
 			w, _ := win.Size()
 			win.MoveResize(x, y, w, int(math.Round(float64(w)/aspectRatio)))
+			save()
 		case <-ticker.C:
 			for {
 				e, ok := win.Poll()
@@ -230,6 +234,9 @@ func main() {
 
 				case window.Release:
 					if e.Button == 1 {
+						if moveDragging || resizeDragging {
+							save()
+						}
 						moveDragging = false
 						resizeDragging = false
 						activeCorner = noCorner
